@@ -3,28 +3,59 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/bigairjosh/circlui/api"
 	table "github.com/calyptia/go-bubble-table"
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jszwedko/go-circleci"
 	"golang.org/x/term"
 )
 
-
 var cliConfig api.CliConfig = api.LoadCliConfig()
 var client circleci.Client = circleci.Client{Token: cliConfig.Token}
 
+type keyMap struct {
+	Reload key.Binding
+	Help   key.Binding
+	Quit   key.Binding
+}
+
+func (k keyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Help, k.Quit}
+}
+
+func (k keyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.Reload},       // first column
+		{k.Help}, // second column
+    {k.Quit},
+	}
+}
+
+var keys = keyMap{
+	Reload: key.NewBinding(
+		key.WithKeys("ctrl+r"),
+		key.WithHelp("ctrl+r", "reload"),
+	),
+	Help: key.NewBinding(
+		key.WithKeys("?"),
+		key.WithHelp("?", "toggle help"),
+	),
+	Quit: key.NewBinding(
+		key.WithKeys("esc", "ctrl+c"),
+		key.WithHelp("ctrl+c", "quit"),
+	),
+}
+
 func main() {
 
-  // builds, _ := client.ListRecentBuilds(-1, 0)
-
-  // for _, b := range builds {
-  //   fmt.Printf("%s\n", b.Reponame)
-  // }
-
+  client.Debug = false
 	err := tea.NewProgram(initialModel(), tea.WithAltScreen()).Start()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -32,10 +63,19 @@ func main() {
 	}
 }
 
+func getBranch() string {
+  path, _ := os.Getwd()
+  cmd := exec.Command("git", "branch", "--show-current")
+  cmd.Dir = path
+  out, _ := cmd.Output()
+
+  return strings.TrimSpace(string(out))
+}
+
 var (
 	styleDoc = lipgloss.NewStyle().
-    Border(lipgloss.NormalBorder(), true).
-    Padding(1)
+		// Border(lipgloss.NormalBorder(), true).
+		Padding(1)
 )
 
 func initialModel() model {
@@ -46,48 +86,86 @@ func initialModel() model {
 	}
 	top, right, bottom, left := styleDoc.GetPadding()
 	w = w - left - right
-	h = h - top - bottom
+	h = h - top - bottom - 1
 
-	tbl := table.New([]string{"ID", "App", "Branch", "Remaining"}, w, h)
+	tbl := table.New([]string{"Pipeline", "Workflow", "Status", "Branch", "Commiter", "Start", "Duration"}, w, h - 6)
 	tbl.Styles = table.Styles{
 		Title:       lipgloss.NewStyle().Bold(true),
 		SelectedRow: lipgloss.NewStyle().Foreground(lipgloss.Color("#AFD75F")),
 	}
-  
-  builds, _ := client.ListRecentBuilds(100, 0)
-	rows := buildsToRows(builds)
- 	tbl.SetRows(rows)
 
-  model := model{table: tbl, builds: builds}
+	// builds, _ := client.ListRecentBuildsForProject("deliveroo", "orderweb", "", "", 100, 0)
+	// tbl.SetRows(buildsToRows(builds))
 
-  return model
+	model := model{
+		table:      tbl,
+		builds:     nil,
+    branchFilter: getBranch(),
+		keys:       keys,
+		help:       help.New(),
+		inputStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("#FF75B7")),
+	}
+
+  loadBuilds(&model)
+
+	return model
+}
+
+func loadBuilds(model *model) {
+  builds, _ := client.ListRecentBuildsForProject("deliveroo", "orderweb", model.branchFilter, "", 100, 0)
+  model.builds = builds
+	model.table.SetRows(buildsToRows(builds))
 }
 
 func buildsToRows(builds []*circleci.Build) []table.Row {
 	rows := make([]table.Row, len(builds))
 	for i := 0; i < len(builds); i++ {
+		startTime := time.Since(time.Now()).Round(1 * time.Minute)
+		if builds[i].StartTime != nil {
+			startTime = time.Since(*builds[i].StartTime).Round(1 * time.Minute)
+		}
+    duration := ""
+    if builds[i].Status == "running" {
+      duration = time.Since(*builds[i].StartTime).String()
+    }
+		if builds[i].StopTime != nil {
+			duration = builds[i].StopTime.Sub(*builds[i].StartTime).Round(1 * time.Second).String()
+		}
+
+    comitter := ""
+    if(len(builds[i].AllCommitDetails) > 0) {
+      comitter = builds[i].AllCommitDetails[0].CommitterLogin
+    }
+
 		rows[i] = table.SimpleRow{
-			builds[i].BuildNum,
-			builds[i].JobName,
+			builds[i].Reponame,
+			builds[i].Workflows.JobName,
+			builds[i].Status,
 			builds[i].Branch,
-			builds[i].BuildTimeMillis,
+      comitter,
+			startTime.Round(60).String(),
+			duration,
 		}
 	}
-  return rows
+	return rows
 }
 
 type model struct {
-	table table.Model
-  builds []*circleci.Build
+	keys       keyMap
+	help       help.Model
+	inputStyle lipgloss.Style
+	table      table.Model
+	builds     []*circleci.Build
+  branchFilter string
 }
 
 type TickMsg time.Time
 
 func tickEvery() tea.Cmd {
-  return tea.Every(time.Second,
-  func(t time.Time) tea.Msg {
-    return TickMsg(t)
-  })
+	return tea.Every(time.Second,
+		func(t time.Time) tea.Msg {
+			return TickMsg(t)
+		})
 }
 
 func (m model) Init() tea.Cmd {
@@ -100,23 +178,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		top, right, bottom, left := styleDoc.GetPadding()
 		m.table.SetSize(
 			msg.Width-left-right,
-			msg.Height-top-bottom,
+			msg.Height-top-bottom-1,// TODO break out to function
 		)
-  case TickMsg:
-    // for i, j := range m.jobs {
-    //   if j.RemianingSeconds > 0 {
-    //     m.jobs[i].RemianingSeconds = j.RemianingSeconds - 1
-    //   }
-    // }
-    // m.table.SetRows(jobsToRows(m.jobs))
-    return m, tickEvery()
-	case tea.KeyMsg:
-		switch msg.String() {
-    case "ctrl+r":
+		m.help.Width = msg.Width
+	case TickMsg:
     m.table.SetRows(buildsToRows(m.builds))
-    return m, nil
-    case "ctrl+c":
+		return m, tickEvery()
+	case tea.KeyMsg:
+		switch {
+		case key.Matches(msg, m.keys.Reload):
+      loadBuilds(&m)
+			return m, nil
+		case key.Matches(msg, m.keys.Help):
+			m.help.ShowAll = !m.help.ShowAll
+      return m, nil
+		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
+    case msg.String() == "backspace":
+      l := len(m.branchFilter)
+      if(l > 0) {
+        m.branchFilter = m.branchFilter[:l-1]
+      }
+      return m, nil
+    case msg.String() == "enter":
+      loadBuilds(&m)
+      return m, nil
+    default:
+      m.branchFilter += msg.String()
 		}
 	}
 
@@ -126,7 +214,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	return styleDoc.Render(
-		m.table.View(),
-	)
+	helpView := m.help.View(m.keys)
+	height := strings.Count(helpView, "\n")
+
+	return styleDoc.Render(m.table.View()) + "\nbranch filter: " + m.branchFilter + "\n" + strings.Repeat("\n", height) + helpView
 }
