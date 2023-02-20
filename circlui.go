@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jszwedko/go-circleci"
 	"golang.org/x/term"
+  "github.com/hako/durafmt"
 )
 
 var cliConfig api.CliConfig = api.LoadCliConfig()
@@ -53,6 +54,8 @@ var keys = keyMap{
 	),
 }
 
+var units, _ = durafmt.DefaultUnitsCoder.Decode("y:y,w:w,d:d,h:h,m:m,s:s,ms:ms,mi:mi")
+
 func main() {
 
   client.Debug = false
@@ -70,6 +73,18 @@ func getBranch() string {
   out, _ := cmd.Output()
 
   return strings.TrimSpace(string(out))
+}
+
+func getRepository() string {
+  path, _ := os.Getwd()
+  cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+  cmd.Dir = path
+  out, _ := cmd.Output()
+
+  splitPath := strings.Split(string(out), "/")
+  repo := splitPath[len(splitPath) - 1]
+
+  return strings.TrimSpace(repo)
 }
 
 var (
@@ -94,9 +109,6 @@ func initialModel() model {
 		SelectedRow: lipgloss.NewStyle().Foreground(lipgloss.Color("#AFD75F")),
 	}
 
-	// builds, _ := client.ListRecentBuildsForProject("deliveroo", "orderweb", "", "", 100, 0)
-	// tbl.SetRows(buildsToRows(builds))
-
 	model := model{
 		table:      tbl,
 		builds:     nil,
@@ -104,6 +116,7 @@ func initialModel() model {
 		keys:       keys,
 		help:       help.New(),
 		inputStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("#FF75B7")),
+    repository: getRepository(),
 	}
 
   loadBuilds(&model)
@@ -112,7 +125,7 @@ func initialModel() model {
 }
 
 func loadBuilds(model *model) {
-  builds, _ := client.ListRecentBuildsForProject("deliveroo", "orderweb", model.branchFilter, "", 100, 0)
+  builds, _ := client.ListRecentBuildsForProject("deliveroo", model.repository, model.branchFilter, "", 100, 0)
   model.builds = builds
 	model.table.SetRows(buildsToRows(builds))
 }
@@ -124,12 +137,12 @@ func buildsToRows(builds []*circleci.Build) []table.Row {
 		if builds[i].StartTime != nil {
 			startTime = time.Since(*builds[i].StartTime).Round(1 * time.Minute)
 		}
-    duration := ""
+    var duration time.Duration 
     if builds[i].Status == "running" {
-      duration = time.Since(*builds[i].StartTime).String()
+      duration = time.Since(*builds[i].StartTime)
     }
 		if builds[i].StopTime != nil {
-			duration = builds[i].StopTime.Sub(*builds[i].StartTime).Round(1 * time.Second).String()
+      duration = builds[i].StopTime.Sub(*builds[i].StartTime)
 		}
 
     comitter := ""
@@ -143,8 +156,8 @@ func buildsToRows(builds []*circleci.Build) []table.Row {
 			builds[i].Status,
 			builds[i].Branch,
       comitter,
-			startTime.Round(60).String(),
-			duration,
+			durafmt.ParseShort(startTime).String(),
+			durafmt.Parse(duration).LimitFirstN(2).Format(units),
 		}
 	}
 	return rows
@@ -157,6 +170,7 @@ type model struct {
 	table      table.Model
 	builds     []*circleci.Build
   branchFilter string
+  repository string
 }
 
 type TickMsg time.Time
@@ -168,8 +182,17 @@ func tickEvery() tea.Cmd {
 		})
 }
 
+type RefreshMsg time.Time
+
+func refreshEvery() tea.Cmd {
+	return tea.Every(time.Second * 30,
+		func(t time.Time) tea.Msg {
+			return RefreshMsg(t)
+		})
+}
+
 func (m model) Init() tea.Cmd {
-	return tickEvery()
+	return tea.Batch(tickEvery(), refreshEvery())
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -184,6 +207,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TickMsg:
     m.table.SetRows(buildsToRows(m.builds))
 		return m, tickEvery()
+	case RefreshMsg:
+    loadBuilds(&m)
+		return m, refreshEvery()
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keys.Reload):

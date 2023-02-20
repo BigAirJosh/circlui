@@ -1,0 +1,13 @@
+services:
+  workspace:
+    image: scratch
+    user: "${USER_ID}:${GROUP_ID}"
+    volumes:
+      - "${PWD}:${PWD}"
+    working_dir: "${PWD}"
+
+  go:
+    extends:
+      service: workspace
+    image: golang:1.20.0-alpine3.17
+    entrypoint: go
