@@ -25,10 +25,11 @@ all: depend build ## download dependencies and run a build
 
 .PHONY: tinker
 tinker: ## drop into built container for debugging purposes
+	${DOCKER_COMPOSE} run --rm go /bin/sh
 
 .PHONY: run
 run: ## run local using docker container and mocked API
-	${DOCKER_COMPOSE} run --rm go run circlui.go
+	${DOCKER_COMPOSE} run --rm go go run circlui.go
 
 # Dependencies
 .PHONY: depend

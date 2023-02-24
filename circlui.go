@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -13,13 +14,17 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/hako/durafmt"
 	"github.com/jszwedko/go-circleci"
 	"golang.org/x/term"
-  "github.com/hako/durafmt"
 )
 
 var cliConfig api.CliConfig = api.LoadCliConfig()
-var client circleci.Client = circleci.Client{Token: cliConfig.Token}
+var circleUrl = url.URL{Host: cliConfig.Host, Scheme: cliConfig.Scheme, Path: cliConfig.RestEndpoint}
+
+
+var client circleci.Client = circleci.Client{Token: cliConfig.Token, BaseURL: &circleUrl}
+
 
 type keyMap struct {
 	Reload key.Binding

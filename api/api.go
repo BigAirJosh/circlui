@@ -15,6 +15,7 @@ type CliConfig struct {
 	Host         string `yaml:"host"`
 	Token        string `yaml:"token"`
 	RestEndpoint string `yaml:"rest_endpoint"`
+  Scheme       string `yaml:"scheme"`
 }
 
 func LoadCliConfig() CliConfig {

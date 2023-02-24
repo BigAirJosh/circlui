@@ -10,4 +10,17 @@ services:
     extends:
       service: workspace
     image: golang:1.20.0-alpine3.17
-    entrypoint: go
+    links:
+      - wiremock
+    environment:
+      - GOCACHE=/tmp/
+      - HOME=${PWD}
+    tty: true
+    command: go run circlui.go
+
+  wiremock:
+    image: wiremock/wiremock:2.35.0
+    volumes:
+      - "${PWD}/wiremock:/home/wiremock"
+    ports:
+      - "8080:8080"

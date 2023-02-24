@@ -1,0 +1,11 @@
+host: wiremock:8080
+scheme: http
+endpoint: graphql-unstable
+token: 1234
+rest_endpoint: /api/v1/
+tls_cert: ""
+tls_insecure: false
+orb_publishing:
+    default_namespace: ""
+    default_vcs_provider: ""
+    default_owner: ""
