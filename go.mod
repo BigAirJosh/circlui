@@ -14,6 +14,13 @@ require (
 )
 
 require (
+	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/google/go-querystring v1.1.0 // indirect
+	github.com/grezar/go-circleci v0.9.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+)
+
+require (
 	github.com/aymanbagabas/go-osc52 v1.0.3 // indirect
 	github.com/charmbracelet/bubbles v0.11.0 // indirect
 	github.com/containerd/console v1.0.3 // indirect
@@ -28,6 +35,7 @@ require (
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/termenv v0.13.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
+	github.com/stretchr/testify v1.8.3
 	golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab // indirect
 	golang.org/x/text v0.3.7 // indirect
 )
