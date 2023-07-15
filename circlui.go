@@ -15,16 +15,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/hako/durafmt"
-	"github.com/jszwedko/go-circleci"
+  circleci "github.com/grezar/go-circleci"
 	"golang.org/x/term"
 )
 
 var cliConfig api.CliConfig = api.LoadCliConfig()
 var circleUrl = url.URL{Host: cliConfig.Host, Scheme: cliConfig.Scheme, Path: cliConfig.RestEndpoint}
-
-
-var client circleci.Client = circleci.Client{Token: cliConfig.Token, BaseURL: &circleUrl}
-
 
 type keyMap struct {
 	Reload key.Binding
@@ -71,7 +67,7 @@ func main() {
 	}
 }
 
-func getBranch() string {
+func GetBranch() string {
   path, _ := os.Getwd()
   cmd := exec.Command("git", "branch", "--show-current")
   cmd.Dir = path
@@ -117,7 +113,7 @@ func initialModel() model {
 	model := model{
 		table:      tbl,
 		builds:     nil,
-    branchFilter: getBranch(),
+    branchFilter: GetBranch(),
 		keys:       keys,
 		help:       help.New(),
 		inputStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("#FF75B7")),

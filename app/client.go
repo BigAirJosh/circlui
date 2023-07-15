@@ -1,4 +1,4 @@
-package client
+package app
 
 import (
 	"context"
@@ -47,5 +47,16 @@ func (p *pipelines) FetchMyPipelines(ctx context.Context, orgSlug *string, pageT
   }
 
   return pipelines, nil
+  
+}
+
+func (p *pipelines) FetchWorkflows(ctx context.Context, pipelineID string) (*circleci.WorkflowList, error) {
+  options := circleci.PipelineListWorkflowsOptions{
+  }
+  workflows, err := p.client.Pipelines.ListWorkflows(ctx, pipelineID, options)
+  if err != nil {
+    return nil, err
+  }
+  return workflows, nil
   
 }
